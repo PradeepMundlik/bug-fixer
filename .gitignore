@@ -1,0 +1,39 @@
+# Maven
+backend/target/
+backend/.mvn/repository/
+*.class
+*.jar
+*.war
+
+# IntelliJ / IDE
+.idea/
+*.iml
+*.iws
+.vscode/
+*.swp
+
+# Python
+ai-service/__pycache__/
+ai-service/*.pyc
+ai-service/.venv/
+ai-service/venv/
+ai-service/.pytest_cache/
+ai-service/dist/
+ai-service/build/
+ai-service/*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+*.env
+
+# Logs
+*.log
+logs/
+
+# Temp upload extraction
+/tmp/bug-fixer/
