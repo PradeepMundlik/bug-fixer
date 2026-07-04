@@ -29,7 +29,17 @@ _param_query = JAVA_LANGUAGE.query("""
   name: (identifier) @name)
 """)
 
-_call_query = JAVA_LANGUAGE.query("(method_invocation name: (identifier) @callee)")
+_call_with_receiver_query = JAVA_LANGUAGE.query("""
+(method_invocation
+  object: _ @receiver
+  name: (identifier) @callee)
+""")
+
+_call_direct_query = JAVA_LANGUAGE.query("""
+(method_invocation
+  !object
+  name: (identifier) @callee)
+""")
 
 
 def parse(file_content: str, file_path: str = "") -> ParseResponse:
@@ -153,14 +163,29 @@ def _extract_annotations(method_node) -> list[str]:
 
 
 def _extract_callees(body_node, method_name: str) -> list[str]:
-    captures = _call_query.captures(body_node)
     seen: set[str] = set()
     callees: list[str] = []
-    for node in captures.get("callee", []):
-        name = node.text.decode()
-        if name != method_name and name not in seen:
-            seen.add(name)
-            callees.append(name)
+
+    # Calls with explicit receiver — use matches() so receiver+callee are paired per match,
+    # not zipped across all captures (zip breaks on chained calls like a.b().c())
+    for _, bindings in _call_with_receiver_query.matches(body_node):
+        receiver_nodes = bindings.get("receiver", [])
+        callee_nodes = bindings.get("callee", [])
+        if not receiver_nodes or not callee_nodes:
+            continue
+        qualified = f"{receiver_nodes[0].text.decode()}.{callee_nodes[0].text.decode()}"
+        if qualified not in seen:
+            seen.add(qualified)
+            callees.append(qualified)
+
+    # Direct same-class calls: validate(request), applyDiscount(request)
+    for _, bindings in _call_direct_query.matches(body_node):
+        for node in bindings.get("callee", []):
+            name = node.text.decode()
+            if name != method_name and name not in seen:
+                seen.add(name)
+                callees.append(name)
+
     return callees
 
 
