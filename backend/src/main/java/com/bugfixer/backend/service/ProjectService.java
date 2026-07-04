@@ -15,6 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -93,8 +96,15 @@ public class ProjectService {
 
             log.info("Project {} uploaded: {} files extracted to {}", projectId, files.size(), extractDir);
 
-            // Kick off async indexing (file traversal + hashing)
-            indexingJobService.startIndexing(projectId, extractDir.toString());
+            // Kick off async indexing only after this transaction commits —
+            // the background thread needs the project row to be visible in the DB.
+            String extractDirStr = extractDir.toString();
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    indexingJobService.startIndexing(projectId, extractDirStr);
+                }
+            });
 
             return UploadResponse.builder()
                 .projectId(projectId)
