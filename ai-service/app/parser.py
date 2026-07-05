@@ -113,6 +113,8 @@ def _extract_methods(root, file_content: str) -> list[MethodInfo]:
         annotations = _extract_annotations(method_node)
         callees = _extract_callees(body_node, name) if body_node else []
         signature = _build_signature(method_node, source)
+        start_line = method_node.start_point[0] + 1  # tree-sitter is 0-indexed
+        end_line = method_node.end_point[0] + 1
 
         methods.append(MethodInfo(
             name=name,
@@ -121,6 +123,8 @@ def _extract_methods(root, file_content: str) -> list[MethodInfo]:
             parameters=params,
             annotations=annotations,
             callees=callees,
+            start_line=start_line,
+            end_line=end_line,
         ))
 
     return methods

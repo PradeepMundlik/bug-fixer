@@ -3,6 +3,8 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 
+# ── /parse ────────────────────────────────────────────────────────────────────
+
 class ParseRequest(BaseModel):
     file_content: str
     file_path: str = ""
@@ -20,6 +22,8 @@ class MethodInfo(BaseModel):
     parameters: List[Parameter]
     annotations: List[str]
     callees: List[str]
+    start_line: int
+    end_line: int
 
 
 class CallEdge(BaseModel):
@@ -33,3 +37,32 @@ class ParseResponse(BaseModel):
     imports: List[str]
     methods: List[MethodInfo]
     call_graph: List[CallEdge]
+
+
+# ── /index ────────────────────────────────────────────────────────────────────
+
+class IndexRequest(BaseModel):
+    file_content: str
+    file_path: str
+    project_id: str
+    file_id: str
+    language: str = "java"
+
+
+class ChunkResult(BaseModel):
+    chunk_type: str          # "method" | "class"
+    method_name: Optional[str]
+    class_name: Optional[str]
+    content: str
+    start_line: int
+    end_line: int
+    annotations: List[str]
+    callees: List[str]
+    qdrant_point_id: str
+
+
+class IndexResponse(BaseModel):
+    file_path: str
+    project_id: str
+    file_id: str
+    chunks: List[ChunkResult]
