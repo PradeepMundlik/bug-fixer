@@ -16,6 +16,8 @@ class RawChunk:
         callees: List[str],
         start_line: int,
         end_line: int,
+        signature: str = "",
+        imports: Optional[List[str]] = None,
     ):
         self.chunk_type = chunk_type
         self.content = content
@@ -25,6 +27,8 @@ class RawChunk:
         self.callees = callees
         self.start_line = start_line
         self.end_line = end_line
+        self.signature = signature
+        self.imports = imports if imports is not None else []
 
 
 def produce_chunks(
@@ -48,6 +52,8 @@ def produce_chunks(
             callees=method.callees,
             start_line=method.start_line,
             end_line=method.end_line,
+            signature=method.signature,
+            imports=parse_result.imports,
         ))
 
     # One class-level chunk — imports + class declaration (everything outside method bodies)
@@ -62,6 +68,8 @@ def produce_chunks(
             callees=[],
             start_line=1,
             end_line=len(lines),
+            signature="",
+            imports=parse_result.imports,
         ))
 
     return chunks

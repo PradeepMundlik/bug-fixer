@@ -19,6 +19,18 @@ services:
       timeout: 5s
       retries: 5
 
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin4
+    ports:
+      - "80:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "pradeepmundlik@gmail.com"
+      PGADMIN_DEFAULT_PASSWORD: "bugfixer"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   qdrant:
     image: qdrant/qdrant:latest
     container_name: bugfixer-qdrant
@@ -27,6 +39,41 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
+
+  ai-service:
+    build: ./ai-service
+    container_name: bugfixer-ai
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./ai-service/.env
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - PROJECT_STORAGE_ROOT=/tmp/bug-fixer
+    volumes:
+      - ./ai-service:/app
+      - /tmp/bug-fixer:/tmp/bug-fixer      # read extracted project files (read_file/grep)
+    depends_on:
+      - qdrant
+
+  backend:
+    build: ./backend
+    container_name: bugfixer-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/bugfixer
+      - SPRING_DATASOURCE_USERNAME=bugfixer_admin
+      - SPRING_DATASOURCE_PASSWORD=bugfixer
+      - AI_SERVICE_URL=http://ai-service:8000
+    volumes:
+      - /tmp/bug-fixer:/tmp/bug-fixer      # write extracted project files
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
 
 volumes:
   postgres_data:

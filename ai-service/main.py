@@ -3,13 +3,16 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 
+from app.bm25_index import invalidate as invalidate_bm25
 from app.chunking import produce_chunks
 from app.embedding import embed_batch
-from app.models import IndexRequest, IndexResponse, ChunkResult, ParseRequest, ParseResponse
+from app.models import IndexRequest, IndexResponse, ChunkResult, ParseRequest, ParseResponse, SearchRequest, SearchResponse, SearchHit
 from app.parser import parse
-from app.qdrant_store import ensure_collection
+from app.qdrant_store import ensure_collection, upsert_chunks
+from app.search_service import hybrid_search
+from tools.tool_registry import TOOL_SCHEMAS, dispatch
 
 
 @asynccontextmanager
@@ -26,6 +29,53 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/tools")
+def list_tools():
+    """Return the Grok/OpenAI-compatible schemas for every registered tool."""
+    return {"tools": TOOL_SCHEMAS}
+
+
+@app.post("/tools/{tool_name}")
+def invoke_tool(tool_name: str, body: dict = Body(default={})):
+    """Manually invoke a tool by name with a JSON body of its keyword arguments."""
+    try:
+        return {"tool": tool_name, "result": dispatch(tool_name, body)}
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Unknown tool: {tool_name}")
+    except TypeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/search", response_model=SearchResponse)
+def search_code(req: SearchRequest):
+    fused = hybrid_search(
+        project_id=req.project_id,
+        query=req.query,
+        top_k=req.top_k,
+        class_name=req.class_name,
+        language=req.language,
+        file_path_prefix=req.file_path_prefix,
+    )
+
+    results = [
+        SearchHit(
+            score=round(h["rrf_score"], 6),
+            file_path=h.get("file_path", ""),
+            chunk_type=h.get("chunk_type", ""),
+            class_name=h.get("class_name"),
+            method_name=h.get("method_name"),
+            content=h.get("content", ""),
+            start_line=h.get("start_line", 0),
+            end_line=h.get("end_line", 0),
+            callees=h.get("callees", []),
+        )
+        for h in fused
+    ]
+    return SearchResponse(query=req.query, project_id=req.project_id, results=results)
+
+
 @app.post("/parse", response_model=ParseResponse)
 def parse_file(req: ParseRequest):
     try:
@@ -38,7 +88,6 @@ def parse_file(req: ParseRequest):
 def index_file(req: IndexRequest):
     try:
         print(f"Indexing file: {req.file_path} (project_id={req.project_id}, file_id={req.file_id})")
-        from app.qdrant_store import upsert_chunks
 
         # 1. Parse → AST
         parse_result = parse(req.file_content, req.file_path)
@@ -82,6 +131,9 @@ def index_file(req: IndexRequest):
             )
             for chunk, pid in zip(raw_chunks, point_ids)
         ]
+
+        # 6. Invalidate cached BM25 index so next search includes this file
+        invalidate_bm25(req.project_id)
 
         return IndexResponse(
             file_path=req.file_path,

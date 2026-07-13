@@ -21,6 +21,9 @@ ai-service/.pytest_cache/
 ai-service/dist/
 ai-service/build/
 ai-service/*.egg-info/
+ai-service/app/__pycache__
+./__pycache__/*
+*.pyc
 
 # OS
 .DS_Store

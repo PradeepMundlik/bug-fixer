@@ -3,7 +3,7 @@ import uuid
 from typing import List, Optional
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
 
 from app.chunking import RawChunk
 from app.embedding import VECTOR_DIM
@@ -61,6 +61,8 @@ def upsert_chunks(
                 "method_name": chunk.method_name,
                 "annotations": chunk.annotations,
                 "callees": chunk.callees,
+                "signature": chunk.signature,
+                "imports": chunk.imports,
                 "start_line": chunk.start_line,
                 "end_line": chunk.end_line,
                 "content": chunk.content,
@@ -69,3 +71,72 @@ def upsert_chunks(
 
     client.upsert(collection_name=COLLECTION_NAME, points=points)
     return point_ids
+
+
+def search_chunks(
+    query_vector: List[float],
+    project_id: str,
+    top_k: int = 5,
+    class_name: Optional[str] = None,
+    language: Optional[str] = None,
+) -> List[dict]:
+    must = [FieldCondition(key="project_id", match=MatchValue(value=project_id))]
+    if class_name:
+        must.append(FieldCondition(key="class_name", match=MatchValue(value=class_name)))
+    if language:
+        must.append(FieldCondition(key="language", match=MatchValue(value=language)))
+
+    hits = get_client().search(
+        collection_name=COLLECTION_NAME,
+        query_vector=query_vector,
+        query_filter=Filter(must=must),
+        limit=top_k,
+        with_payload=True,
+    )
+    return [{"point_id": str(hit.id), "score": hit.score, **hit.payload} for hit in hits]
+
+
+def find_method_chunk(
+    project_id: str,
+    class_name: Optional[str],
+    method_name: str,
+) -> Optional[dict]:
+    """Fetch a single method chunk by class + method name (used by the metadata tools)."""
+    must = [
+        FieldCondition(key="project_id", match=MatchValue(value=project_id)),
+        FieldCondition(key="method_name", match=MatchValue(value=method_name)),
+    ]
+    if class_name:
+        must.append(FieldCondition(key="class_name", match=MatchValue(value=class_name)))
+
+    batch, _ = get_client().scroll(
+        collection_name=COLLECTION_NAME,
+        scroll_filter=Filter(must=must),
+        limit=1,
+        with_payload=True,
+    )
+    if not batch:
+        return None
+    point = batch[0]
+    return {"point_id": str(point.id), **point.payload}
+
+
+def scroll_all_chunks(project_id: str) -> List[dict]:
+    """Fetch every chunk for a project (used to build the BM25 index)."""
+    must = [FieldCondition(key="project_id", match=MatchValue(value=project_id))]
+    all_points: List[dict] = []
+    offset = None
+
+    while True:
+        batch, offset = get_client().scroll(
+            collection_name=COLLECTION_NAME,
+            scroll_filter=Filter(must=must),
+            limit=250,
+            offset=offset,
+            with_payload=True,
+        )
+        all_points.extend({"point_id": str(p.id), **p.payload} for p in batch)
+        if offset is None:
+            break
+
+    return all_points

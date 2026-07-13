@@ -39,6 +39,35 @@ class ParseResponse(BaseModel):
     call_graph: List[CallEdge]
 
 
+# ── /search ───────────────────────────────────────────────────────────────────
+
+class SearchRequest(BaseModel):
+    query: str
+    project_id: str
+    top_k: int = 5
+    class_name: Optional[str] = None        # exact match filter applied in Qdrant
+    language: Optional[str] = None          # exact match filter applied in Qdrant
+    file_path_prefix: Optional[str] = None  # prefix post-filter applied in Python
+
+
+class SearchHit(BaseModel):
+    score: float
+    file_path: str
+    chunk_type: str
+    class_name: Optional[str]
+    method_name: Optional[str]
+    content: str
+    start_line: int
+    end_line: int
+    callees: List[str]
+
+
+class SearchResponse(BaseModel):
+    query: str
+    project_id: str
+    results: List[SearchHit]
+
+
 # ── /index ────────────────────────────────────────────────────────────────────
 
 class IndexRequest(BaseModel):
