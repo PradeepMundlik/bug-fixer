@@ -14,6 +14,11 @@ from app.qdrant_store import ensure_collection, upsert_chunks
 from app.search_service import hybrid_search
 from tools.tool_registry import TOOL_SCHEMAS, dispatch
 
+from instructor.exceptions import InstructorRetryException
+
+from agent.models import PlanRequest, InvestigationPlan
+from agent.planner import create_plan
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -46,6 +51,17 @@ def invoke_tool(tool_name: str, body: dict = Body(default={})):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/plan", response_model=InvestigationPlan)
+def plan_investigation(req: PlanRequest):
+    """Decompose a bug report into an ordered, validated investigation plan."""
+    try:
+        return create_plan(req.bug_description, req.project_id)
+    except InstructorRetryException as e:
+        raise HTTPException(status_code=422, detail=f"Could not produce a valid plan: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Planner/LLM error: {e}")
 
 
 @app.post("/search", response_model=SearchResponse)

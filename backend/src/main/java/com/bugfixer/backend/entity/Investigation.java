@@ -1,10 +1,13 @@
 package com.bugfixer.backend.entity;
 
+import com.bugfixer.backend.dto.PlanDto;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -26,13 +29,25 @@ public class Investigation {
     @Column(name = "project_id", nullable = false)
     private UUID projectId;
 
-    @Column(name = "bug_report", nullable = false, columnDefinition = "TEXT")
-    private String bugReport;
+    @Column(name = "bug_description", nullable = false, columnDefinition = "TEXT")
+    private String bugDescription;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     @Builder.Default
-    private String status = "PENDING";
+    private InvestigationStatus status = InvestigationStatus.PLANNING;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "plan_json", columnDefinition = "jsonb")
+    private PlanDto planJson;
+
+    @Column(name = "summary", columnDefinition = "TEXT")
+    private String summary;
+
+    @Column(name = "error_message", columnDefinition = "TEXT")
+    private String errorMessage;
+
+    // Populated in later days (root cause analysis)
     @Column(name = "root_cause", columnDefinition = "TEXT")
     private String rootCause;
 

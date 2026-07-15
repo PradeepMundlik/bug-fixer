@@ -2,6 +2,8 @@ package com.bugfixer.backend.service;
 
 import com.bugfixer.backend.dto.IndexFileRequest;
 import com.bugfixer.backend.dto.IndexFileResponse;
+import com.bugfixer.backend.dto.PlanDto;
+import com.bugfixer.backend.dto.PlanRequestDto;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import org.springframework.http.HttpEntity;
@@ -12,6 +14,7 @@ import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 @Service
@@ -46,6 +49,27 @@ public class AiServiceClient {
 
         } catch (Exception e) {
             throw new RuntimeException("Failed to call AI service for file: " + request.getFilePath(), e);
+        }
+    }
+
+    public PlanDto createPlan(PlanRequestDto request) {
+        String url = aiServiceUrl + "/plan";
+        log.debug("Calling AI service: POST {} for project {}", url, request.getProjectId());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        try {
+            String jsonBody = objectMapper.writeValueAsString(request);
+            HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+            return restTemplate.postForObject(url, entity, PlanDto.class);
+
+        } catch (HttpStatusCodeException e) {
+            // Surface the Python error body (e.g. 422 invalid plan, 502 LLM error)
+            throw new RuntimeException(
+                    "AI /plan failed (" + e.getStatusCode() + "): " + e.getResponseBodyAsString(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to call AI /plan: " + e.getMessage(), e);
         }
     }
 }
